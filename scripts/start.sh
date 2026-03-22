@@ -33,9 +33,72 @@ fi
 # ── Generate instance config.json if missing ─────────────────────────────────
 CONFIG_FILE="${INSTANCE_ROOT}/config.json"
 if [ ! -f "${CONFIG_FILE}" ]; then
-    echo "No config.json found — running paperclipai onboard with defaults..."
-    paperclipai onboard --yes
-    echo "Onboard complete."
+    echo "No config.json found — generating cloud-compatible config..."
+    PUBLIC_URL="${PAPERCLIP_PUBLIC_URL:-https://localhost:${PORT:-10000}}"
+    node -e "
+const fs = require('fs');
+const config = {
+  \"\\\$meta\": { version: 1, updatedAt: new Date().toISOString(), source: 'render-startup' },
+  database: {
+    mode: 'embedded-postgres',
+    embeddedPostgresDataDir: '${INSTANCE_ROOT}/db',
+    embeddedPostgresPort: 54329,
+    backup: { enabled: true, intervalMinutes: 60, retentionDays: 30, dir: '${INSTANCE_ROOT}/data/backups' }
+  },
+  logging: { mode: 'file', logDir: '${INSTANCE_ROOT}/logs' },
+  server: {
+    deploymentMode: 'authenticated',
+    exposure: 'public',
+    host: '0.0.0.0',
+    port: Number(process.env.PORT) || 10000,
+    allowedHostnames: [],
+    serveUi: true
+  },
+  auth: {
+    baseUrlMode: 'explicit',
+    publicBaseUrl: '${PUBLIC_URL}',
+    disableSignUp: false
+  },
+  storage: {
+    provider: 'local_disk',
+    localDisk: { baseDir: '${INSTANCE_ROOT}/data/storage' },
+    s3: { bucket: 'paperclip', region: 'us-east-1', prefix: '', forcePathStyle: false }
+  },
+  secrets: {
+    provider: 'local_encrypted',
+    strictMode: false,
+    localEncrypted: { keyFilePath: '${INSTANCE_ROOT}/secrets/master.key' }
+  }
+};
+fs.writeFileSync('${CONFIG_FILE}', JSON.stringify(config, null, 2));
+console.log('Config generated for authenticated+public mode');
+"
+fi
+
+# ── Patch config.json auth section if needed ─────────────────────────────────
+# Ensures auth.baseUrlMode=explicit and auth.publicBaseUrl is set
+# (handles case where config was created by onboard with wrong defaults)
+if [ -f "${CONFIG_FILE}" ]; then
+    PUBLIC_URL="${PAPERCLIP_PUBLIC_URL:-https://localhost:${PORT:-10000}}"
+    node -e "
+const fs = require('fs');
+const config = JSON.parse(fs.readFileSync('${CONFIG_FILE}', 'utf8'));
+let changed = false;
+if (!config.auth) { config.auth = {}; changed = true; }
+if (config.auth.baseUrlMode !== 'explicit') { config.auth.baseUrlMode = 'explicit'; changed = true; }
+if (config.auth.publicBaseUrl !== '${PUBLIC_URL}') { config.auth.publicBaseUrl = '${PUBLIC_URL}'; changed = true; }
+if (config.server) {
+  if (config.server.deploymentMode !== 'authenticated') { config.server.deploymentMode = 'authenticated'; changed = true; }
+  if (config.server.exposure !== 'public') { config.server.exposure = 'public'; changed = true; }
+  if (config.server.host !== '0.0.0.0') { config.server.host = '0.0.0.0'; changed = true; }
+}
+if (changed) {
+  fs.writeFileSync('${CONFIG_FILE}', JSON.stringify(config, null, 2));
+  console.log('Config patched for authenticated+public mode');
+} else {
+  console.log('Config already correct');
+}
+"
 fi
 
 # ── Generate .env if missing ─────────────────────────────────────────────────
