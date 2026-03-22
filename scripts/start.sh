@@ -85,6 +85,7 @@ if [ -f "${CONFIG_FILE}" ]; then
 const fs = require('fs');
 const config = JSON.parse(fs.readFileSync('${CONFIG_FILE}', 'utf8'));
 let changed = false;
+// NOTE: keep \$ escaped so bash does not expand $meta before Node executes.
 if (!config['\$meta']) { config['\$meta'] = { version: 1 }; changed = true; }
 if (!['onboard', 'configure', 'doctor'].includes(config['\$meta'].source)) {
   config['\$meta'].source = 'configure';
