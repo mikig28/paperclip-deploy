@@ -19,13 +19,11 @@ mkdir -p "${INSTANCE_ROOT}/workspaces"
 mkdir -p "${INSTANCE_ROOT}/projects"
 
 # Embedded PG startup currently fails if the target data dir is pre-created.
-# Keep /db absent on first boot; only clean it if it already exists but is stale.
+# Keep /db absent on first boot; remove any non-cluster dir (missing PG_VERSION).
 DB_DIR="${INSTANCE_ROOT}/db"
 if [ -d "${DB_DIR}" ] && [ ! -f "${DB_DIR}/PG_VERSION" ]; then
-    if find "${DB_DIR}" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
-        echo "DB dir has stale contents without PG_VERSION; clearing for clean initdb..."
-        find "${DB_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-    fi
+    echo "DB dir exists without PG_VERSION; removing for clean initdb..."
+    rm -rf "${DB_DIR}"
 fi
 
 # Claude CLI config dir
