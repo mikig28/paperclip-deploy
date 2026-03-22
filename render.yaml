@@ -1,0 +1,46 @@
+services:
+  - type: web
+    name: paperclip
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: standard
+    region: oregon
+    healthCheckPath: /api/health
+    autoDeploy: true
+
+    disk:
+      name: paperclip-data
+      mountPath: /data
+      sizeGB: 10
+
+    envVars:
+      - key: HOST
+        value: "0.0.0.0"
+      - key: PORT
+        value: "3100"
+      - key: SERVE_UI
+        value: "true"
+      - key: PAPERCLIP_HOME
+        value: "/data/paperclip"
+      - key: PAPERCLIP_INSTANCE_ID
+        value: "default"
+      - key: PAPERCLIP_DEPLOYMENT_MODE
+        value: "authenticated"
+      - key: PAPERCLIP_DEPLOYMENT_EXPOSURE
+        value: "public"
+      - key: PAPERCLIP_MIGRATION_AUTO_APPLY
+        value: "true"
+      - key: HEARTBEAT_SCHEDULER_ENABLED
+        value: "true"
+      - key: CLAUDE_CONFIG_DIR
+        value: "/data/claude-config"
+      - key: HOME
+        value: "/data/home"
+      - key: XDG_CONFIG_HOME
+        value: "/data/home/.config"
+      # Set your public URL after first deploy:
+      # - key: PAPERCLIP_PUBLIC_URL
+      #   value: "https://paperclip-XXXX.onrender.com"
+      # Copy from your local .env:
+      - key: PAPERCLIP_AGENT_JWT_SECRET
+        sync: false

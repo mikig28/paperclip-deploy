@@ -1,0 +1,8 @@
+.git
+.gitignore
+*.md
+.env
+.env.*
+paperclip-migration.tar.gz
+config/
+node_modules/

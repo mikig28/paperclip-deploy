@@ -1,0 +1,23 @@
+# Paperclip local state (never commit)
+.paperclip/
+*.key
+.credentials.json
+credentials.json
+
+# Migration archives
+paperclip-migration.tar.gz
+
+# Environment files with secrets
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+
+# Codex config (separate from Paperclip)
+config/secret_key
+config/logs/
