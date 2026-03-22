@@ -84,13 +84,13 @@ if [ -f "${CONFIG_FILE}" ]; then
     node -e "
 const fs = require('fs');
 const config = JSON.parse(fs.readFileSync('${CONFIG_FILE}', 'utf8'));
+const metaKey = '$' + 'meta';
 let changed = false;
-if (!config['$meta']) { config['$meta'] = { version: 1 }; changed = true; }
-if (!['onboard', 'configure', 'doctor'].includes(config['$meta'].source)) {
-  config['$meta'].source = 'configure';
+if (!config[metaKey]) { config[metaKey] = { version: 1 }; changed = true; }
+if (!['onboard', 'configure', 'doctor'].includes(config[metaKey].source)) {
+  config[metaKey].source = 'configure';
   changed = true;
 }
-config['$meta'].updatedAt = new Date().toISOString();
 if (!config.auth) { config.auth = {}; changed = true; }
 if (config.auth.baseUrlMode !== 'explicit') { config.auth.baseUrlMode = 'explicit'; changed = true; }
 if (config.auth.publicBaseUrl !== '${PUBLIC_URL}') { config.auth.publicBaseUrl = '${PUBLIC_URL}'; changed = true; }
@@ -100,6 +100,7 @@ if (config.server) {
   if (config.server.host !== '0.0.0.0') { config.server.host = '0.0.0.0'; changed = true; }
 }
 if (changed) {
+  config[metaKey].updatedAt = new Date().toISOString();
   fs.writeFileSync('${CONFIG_FILE}', JSON.stringify(config, null, 2));
   console.log('Config patched for authenticated+public mode');
 } else {
