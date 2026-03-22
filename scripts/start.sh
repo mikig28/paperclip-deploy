@@ -39,7 +39,7 @@ if [ ! -f "${CONFIG_FILE}" ]; then
     node -e "
 const fs = require('fs');
 const config = {
-  \"\\\$meta\": { version: 1, updatedAt: new Date().toISOString(), source: 'render-startup' },
+  \"\\\$meta\": { version: 1, updatedAt: new Date().toISOString(), source: 'configure' },
   database: {
     mode: 'embedded-postgres',
     embeddedPostgresDataDir: '${INSTANCE_ROOT}/db',
@@ -85,6 +85,12 @@ if [ -f "${CONFIG_FILE}" ]; then
 const fs = require('fs');
 const config = JSON.parse(fs.readFileSync('${CONFIG_FILE}', 'utf8'));
 let changed = false;
+if (!config['\$meta']) { config['\$meta'] = { version: 1 }; changed = true; }
+if (!['onboard', 'configure', 'doctor'].includes(config['\$meta'].source)) {
+  config['\$meta'].source = 'configure';
+  changed = true;
+}
+config['\$meta'].updatedAt = new Date().toISOString();
 if (!config.auth) { config.auth = {}; changed = true; }
 if (config.auth.baseUrlMode !== 'explicit') { config.auth.baseUrlMode = 'explicit'; changed = true; }
 if (config.auth.publicBaseUrl !== '${PUBLIC_URL}') { config.auth.publicBaseUrl = '${PUBLIC_URL}'; changed = true; }
