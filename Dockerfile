@@ -25,24 +25,26 @@ ENV XDG_CONFIG_HOME=/data/home/.config
 
 # Server configuration via env vars (overridden by Render env vars)
 ENV HOST=0.0.0.0
-ENV PORT=3100
+# PORT is set by Render automatically (usually 10000)
+# We default to 3100 but Render will override via env var
+ENV PORT=10000
 ENV SERVE_UI=true
 ENV PAPERCLIP_DEPLOYMENT_MODE=authenticated
 ENV PAPERCLIP_DEPLOYMENT_EXPOSURE=public
 ENV PAPERCLIP_MIGRATION_AUTO_APPLY=true
 ENV HEARTBEAT_SCHEDULER_ENABLED=true
 
-# Copy startup script
+# Copy startup script (sed fixes Windows CRLF line endings)
 COPY scripts/start.sh /app/start.sh
-RUN chmod +x /app/start.sh
+RUN sed -i 's/\r$//' /app/start.sh && chmod +x /app/start.sh
 
 # Copy migration helper
 COPY scripts/migrate-state.sh /app/migrate-state.sh
-RUN chmod +x /app/migrate-state.sh
+RUN sed -i 's/\r$//' /app/migrate-state.sh && chmod +x /app/migrate-state.sh
 
-EXPOSE 3100
+EXPOSE 10000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:3100/api/health || exit 1
+    CMD curl -f http://localhost:${PORT}/api/health || exit 1
 
 CMD ["/app/start.sh"]

@@ -17,7 +17,7 @@ services:
       - key: HOST
         value: "0.0.0.0"
       - key: PORT
-        value: "3100"
+        value: "10000"
       - key: SERVE_UI
         value: "true"
       - key: PAPERCLIP_HOME
