@@ -19,6 +19,16 @@ mkdir -p "${INSTANCE_ROOT}/logs"
 mkdir -p "${INSTANCE_ROOT}/workspaces"
 mkdir -p "${INSTANCE_ROOT}/projects"
 
+# Embedded PG initdb fails on non-empty dirs without a valid cluster.
+# If PG_VERSION is missing but files exist, clean stale contents so initdb can run.
+DB_DIR="${INSTANCE_ROOT}/db"
+if [ -d "${DB_DIR}" ] && [ ! -f "${DB_DIR}/PG_VERSION" ]; then
+    if find "${DB_DIR}" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+        echo "DB dir has stale contents without PG_VERSION; clearing for clean initdb..."
+        find "${DB_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    fi
+fi
+
 # Claude CLI config dir
 mkdir -p "${CLAUDE_CONFIG_DIR}"
 mkdir -p "${HOME}"
