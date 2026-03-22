@@ -14,13 +14,14 @@ chown -R paperclip:paperclip /data 2>/dev/null || true
 # Clean up PG data dir if no successful boot has been recorded
 # This handles the case where previous deploys left a broken PG data dir
 DB_DIR="/data/paperclip/instances/default/db"
+DB_PARENT="$(dirname "${DB_DIR}")"
 BOOT_MARKER="/data/.paperclip-boot-ok"
 
 if [ ! -f "${BOOT_MARKER}" ]; then
     echo "No successful boot marker found — wiping PG data dir for fresh init..."
     rm -rf "${DB_DIR}"
-    mkdir -p "${DB_DIR}"
-    chown paperclip:paperclip "${DB_DIR}"
+    mkdir -p "${DB_PARENT}"
+    chown -R paperclip:paperclip "${DB_PARENT}" 2>/dev/null || true
     # Also wipe the config so it gets regenerated fresh
     rm -f "/data/paperclip/instances/default/config.json"
 fi
