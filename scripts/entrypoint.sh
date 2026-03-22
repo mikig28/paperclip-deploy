@@ -11,22 +11,23 @@ echo "Entrypoint: fixing /data ownership..."
 # previous root-owned runs that left files behind
 chown -R paperclip:paperclip /data 2>/dev/null || true
 
-# If there's a corrupted/root-owned PG data dir from a failed init, remove it
+# If the PG data dir was initialized by root (previous failed boot), wipe it
+# The embedded-postgres package will re-initialize as the paperclip user
 DB_DIR="/data/paperclip/instances/default/db"
-if [ -d "${DB_DIR}" ]; then
-    # Check if PG_VERSION exists (indicates a previous init attempt)
-    if [ -f "${DB_DIR}/PG_VERSION" ]; then
-        # Check if postmaster.pid exists but process isn't running (stale)
-        if [ -f "${DB_DIR}/postmaster.pid" ] && ! kill -0 "$(head -1 "${DB_DIR}/postmaster.pid" 2>/dev/null)" 2>/dev/null; then
-            echo "Removing stale postmaster.pid..."
-            rm -f "${DB_DIR}/postmaster.pid"
-        fi
-    elif [ "$(ls -A "${DB_DIR}" 2>/dev/null)" ]; then
-        # Dir has files but no PG_VERSION — incomplete init, clean it
-        echo "Cleaning incomplete PG data dir..."
-        rm -rf "${DB_DIR}"
-        mkdir -p "${DB_DIR}"
-        chown paperclip:paperclip "${DB_DIR}"
+FIRST_BOOT_MARKER="/data/.paperclip-first-boot-done"
+if [ -d "${DB_DIR}" ] && [ ! -f "${FIRST_BOOT_MARKER}" ]; then
+    echo "First successful boot not recorded. Cleaning PG data dir for fresh init..."
+    rm -rf "${DB_DIR}"
+    mkdir -p "${DB_DIR}"
+    chown paperclip:paperclip "${DB_DIR}"
+fi
+
+# Remove stale postmaster.pid if postgres isn't running
+if [ -f "${DB_DIR}/postmaster.pid" ]; then
+    PG_PID=$(head -1 "${DB_DIR}/postmaster.pid" 2>/dev/null || echo "")
+    if [ -n "${PG_PID}" ] && ! kill -0 "${PG_PID}" 2>/dev/null; then
+        echo "Removing stale postmaster.pid..."
+        rm -f "${DB_DIR}/postmaster.pid"
     fi
 fi
 

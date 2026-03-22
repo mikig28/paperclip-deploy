@@ -141,6 +141,10 @@ if echo "${CLAUDE_AUTH}" | grep -q '"loggedIn": *false\|"loggedIn":false'; then
     echo ""
 fi
 
+# ── Mark first boot complete ──────────────────────────────────────────────────
+# This prevents the entrypoint from wiping the PG data dir on subsequent boots
+touch /data/.paperclip-first-boot-done
+
 # ── Start Paperclip ──────────────────────────────────────────────────────────
 echo "Starting paperclipai..."
 exec paperclipai run
