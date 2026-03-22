@@ -19,6 +19,16 @@ mkdir -p "${INSTANCE_ROOT}/logs"
 mkdir -p "${INSTANCE_ROOT}/workspaces"
 mkdir -p "${INSTANCE_ROOT}/projects"
 
+# Embedded PG initdb fails on non-empty dirs without a valid cluster.
+# If PG_VERSION is missing but files exist, clean stale contents so initdb can run.
+DB_DIR="${INSTANCE_ROOT}/db"
+if [ -d "${DB_DIR}" ] && [ ! -f "${DB_DIR}/PG_VERSION" ]; then
+    if find "${DB_DIR}" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+        echo "DB dir has stale contents without PG_VERSION; clearing for clean initdb..."
+        find "${DB_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    fi
+fi
+
 # Claude CLI config dir
 mkdir -p "${CLAUDE_CONFIG_DIR}"
 mkdir -p "${HOME}"
@@ -39,7 +49,7 @@ if [ ! -f "${CONFIG_FILE}" ]; then
     node -e "
 const fs = require('fs');
 const config = {
-  \"\\\$meta\": { version: 1, updatedAt: new Date().toISOString(), source: 'render-startup' },
+  \"\\\$meta\": { version: 1, updatedAt: new Date().toISOString(), source: 'configure' },
   database: {
     mode: 'embedded-postgres',
     embeddedPostgresDataDir: '${INSTANCE_ROOT}/db',
@@ -84,7 +94,13 @@ if [ -f "${CONFIG_FILE}" ]; then
     node -e "
 const fs = require('fs');
 const config = JSON.parse(fs.readFileSync('${CONFIG_FILE}', 'utf8'));
+const metaKey = '$' + 'meta';
 let changed = false;
+if (!config[metaKey]) { config[metaKey] = { version: 1 }; changed = true; }
+if (!['onboard', 'configure', 'doctor'].includes(config[metaKey].source)) {
+  config[metaKey].source = 'configure';
+  changed = true;
+}
 if (!config.auth) { config.auth = {}; changed = true; }
 if (config.auth.baseUrlMode !== 'explicit') { config.auth.baseUrlMode = 'explicit'; changed = true; }
 if (config.auth.publicBaseUrl !== '${PUBLIC_URL}') { config.auth.publicBaseUrl = '${PUBLIC_URL}'; changed = true; }
@@ -94,6 +110,7 @@ if (config.server) {
   if (config.server.host !== '0.0.0.0') { config.server.host = '0.0.0.0'; changed = true; }
 }
 if (changed) {
+  config[metaKey].updatedAt = new Date().toISOString();
   fs.writeFileSync('${CONFIG_FILE}', JSON.stringify(config, null, 2));
   console.log('Config patched for authenticated+public mode');
 } else {
