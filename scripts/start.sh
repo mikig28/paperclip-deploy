@@ -141,9 +141,19 @@ if echo "${CLAUDE_AUTH}" | grep -q '"loggedIn": *false\|"loggedIn":false'; then
     echo ""
 fi
 
-# ── Mark first boot complete ──────────────────────────────────────────────────
-# This prevents the entrypoint from wiping the PG data dir on subsequent boots
-touch /data/.paperclip-first-boot-done
+# ── Mark first boot complete after health check passes ────────────────────────
+# Run in background: wait for the health endpoint, then create the marker
+(
+    for i in $(seq 1 60); do
+        sleep 5
+        if curl -sf "http://localhost:${PORT:-10000}/api/health" > /dev/null 2>&1; then
+            touch /data/.paperclip-boot-ok
+            echo "[boot-marker] Server healthy — boot marker created"
+            exit 0
+        fi
+    done
+    echo "[boot-marker] WARNING: health check never passed within 5 minutes"
+) &
 
 # ── Start Paperclip ──────────────────────────────────────────────────────────
 echo "Starting paperclipai..."

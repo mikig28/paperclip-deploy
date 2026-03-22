@@ -11,15 +11,18 @@ echo "Entrypoint: fixing /data ownership..."
 # previous root-owned runs that left files behind
 chown -R paperclip:paperclip /data 2>/dev/null || true
 
-# If the PG data dir was initialized by root (previous failed boot), wipe it
-# The embedded-postgres package will re-initialize as the paperclip user
+# Clean up PG data dir if no successful boot has been recorded
+# This handles the case where previous deploys left a broken PG data dir
 DB_DIR="/data/paperclip/instances/default/db"
-FIRST_BOOT_MARKER="/data/.paperclip-first-boot-done"
-if [ -d "${DB_DIR}" ] && [ ! -f "${FIRST_BOOT_MARKER}" ]; then
-    echo "First successful boot not recorded. Cleaning PG data dir for fresh init..."
+BOOT_MARKER="/data/.paperclip-boot-ok"
+
+if [ ! -f "${BOOT_MARKER}" ]; then
+    echo "No successful boot marker found — wiping PG data dir for fresh init..."
     rm -rf "${DB_DIR}"
     mkdir -p "${DB_DIR}"
     chown paperclip:paperclip "${DB_DIR}"
+    # Also wipe the config so it gets regenerated fresh
+    rm -f "/data/paperclip/instances/default/config.json"
 fi
 
 # Remove stale postmaster.pid if postgres isn't running
