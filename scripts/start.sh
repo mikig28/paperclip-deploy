@@ -5,7 +5,8 @@ echo "=== Paperclip Render Startup ==="
 echo "PAPERCLIP_HOME=${PAPERCLIP_HOME:-not set}"
 echo "HOME=${HOME:-not set}"
 echo "CLAUDE_CONFIG_DIR=${CLAUDE_CONFIG_DIR:-not set}"
-echo "PORT=${PORT:-3100}"
+echo "PORT=${PORT:-10000}"
+echo "Running as: $(whoami) ($(id -u))"
 
 # ── Ensure persistent directories exist ──────────────────────────────────────
 INSTANCE_ROOT="${PAPERCLIP_HOME}/instances/${PAPERCLIP_INSTANCE_ID:-default}"
