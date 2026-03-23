@@ -13,7 +13,6 @@ export CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-/data/claude-config}"
 
 # ── Ensure persistent directories exist ──────────────────────────────────────
 INSTANCE_ROOT="${PAPERCLIP_HOME}/instances/${PAPERCLIP_INSTANCE_ID:-default}"
-mkdir -p "${INSTANCE_ROOT}/db"
 mkdir -p "${INSTANCE_ROOT}/data/backups"
 mkdir -p "${INSTANCE_ROOT}/data/storage"
 mkdir -p "${INSTANCE_ROOT}/data/run-logs"
@@ -21,6 +20,36 @@ mkdir -p "${INSTANCE_ROOT}/secrets"
 mkdir -p "${INSTANCE_ROOT}/logs"
 mkdir -p "${INSTANCE_ROOT}/workspaces"
 mkdir -p "${INSTANCE_ROOT}/projects"
+
+# Embedded PG startup currently fails if the target data dir is pre-created.
+# Keep /db absent on first boot; remove any non-cluster dir (missing PG_VERSION).
+DB_DIR="${INSTANCE_ROOT}/db"
+if [ -d "${DB_DIR}" ] && [ ! -f "${DB_DIR}/PG_VERSION" ]; then
+    echo "DB dir exists without PG_VERSION; removing for clean initdb..."
+    rm -rf "${DB_DIR}"
+fi
+
+resolve_embedded_initdb() {
+    local global_root
+    global_root="$(npm root -g 2>/dev/null || true)"
+    if [ -z "${global_root}" ]; then
+        return 1
+    fi
+
+    local candidate
+    for candidate in \
+        "${global_root}/paperclipai/node_modules/@embedded-postgres/linux-x64/native/bin/initdb" \
+        "${global_root}/paperclipai/node_modules/@paperclipai/server/node_modules/@embedded-postgres/linux-x64/native/bin/initdb" \
+        "${global_root}/paperclipai/node_modules/@embedded-postgres/"*/native/bin/initdb \
+        "${global_root}/paperclipai/node_modules/@paperclipai/server/node_modules/@embedded-postgres/"*/native/bin/initdb
+    do
+        if [ -x "${candidate}" ]; then
+            echo "${candidate}"
+            return 0
+        fi
+    done
+    return 1
+}
 
 # Claude CLI config dir
 mkdir -p "${CLAUDE_CONFIG_DIR}"
@@ -42,7 +71,7 @@ if [ ! -f "${CONFIG_FILE}" ]; then
     node -e "
 const fs = require('fs');
 const config = {
-  \"\\\$meta\": { version: 1, updatedAt: new Date().toISOString(), source: 'render-startup' },
+  \"\\\$meta\": { version: 1, updatedAt: new Date().toISOString(), source: 'configure' },
   database: {
     mode: 'embedded-postgres',
     embeddedPostgresDataDir: '${INSTANCE_ROOT}/db',
@@ -87,7 +116,13 @@ if [ -f "${CONFIG_FILE}" ]; then
     node -e "
 const fs = require('fs');
 const config = JSON.parse(fs.readFileSync('${CONFIG_FILE}', 'utf8'));
+const metaKey = '$' + 'meta';
 let changed = false;
+if (!config[metaKey]) { config[metaKey] = { version: 1 }; changed = true; }
+if (!['onboard', 'configure', 'doctor'].includes(config[metaKey].source)) {
+  config[metaKey].source = 'configure';
+  changed = true;
+}
 if (!config.auth) { config.auth = {}; changed = true; }
 if (config.auth.baseUrlMode !== 'explicit') { config.auth.baseUrlMode = 'explicit'; changed = true; }
 if (config.auth.publicBaseUrl !== '${PUBLIC_URL}') { config.auth.publicBaseUrl = '${PUBLIC_URL}'; changed = true; }
@@ -97,6 +132,7 @@ if (config.server) {
   if (config.server.host !== '0.0.0.0') { config.server.host = '0.0.0.0'; changed = true; }
 }
 if (changed) {
+  config[metaKey].updatedAt = new Date().toISOString();
   fs.writeFileSync('${CONFIG_FILE}', JSON.stringify(config, null, 2));
   console.log('Config patched for authenticated+public mode');
 } else {
@@ -127,10 +163,23 @@ if [ ! -f "${MASTER_KEY_FILE}" ]; then
     echo "master.key generated. If migrating, replace this with your existing key."
 fi
 
-# ── Ensure Claude credentials file exists without dot prefix ─────────────────
-if [ -f "${CLAUDE_CONFIG_DIR}/.credentials.json" ] && [ ! -f "${CLAUDE_CONFIG_DIR}/credentials.json" ]; then
-    cp "${CLAUDE_CONFIG_DIR}/.credentials.json" "${CLAUDE_CONFIG_DIR}/credentials.json"
-    echo "Copied .credentials.json -> credentials.json for CLI compatibility"
+# Work around embedded-postgres startup bug by initializing cluster manually
+# when PG_VERSION is missing. This prevents paperclip startup from crashing.
+if [ ! -f "${DB_DIR}/PG_VERSION" ]; then
+    echo "PG_VERSION missing — bootstrapping embedded Postgres data dir..."
+    rm -rf "${DB_DIR}"
+    mkdir -p "${DB_DIR}"
+    INITDB_BIN="$(resolve_embedded_initdb || true)"
+    if [ -n "${INITDB_BIN}" ]; then
+        if ! "${INITDB_BIN}" -D "${DB_DIR}" -U paperclip -A trust > /tmp/paperclip-initdb.log 2>&1; then
+            echo "Manual initdb failed. Last output:"
+            sed -n '1,120p' /tmp/paperclip-initdb.log || true
+            exit 1
+        fi
+        echo "Manual initdb completed (${INITDB_BIN})"
+    else
+        echo "WARNING: Could not locate embedded initdb binary; continuing with paperclip startup."
+    fi
 fi
 
 # ── Claude CLI auth check ────────────────────────────────────────────────────

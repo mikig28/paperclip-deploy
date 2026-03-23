@@ -13,6 +13,7 @@ chown -R paperclip:paperclip /data 2>/dev/null || true
 
 # Fix PostgreSQL data directory permissions (must be 0700)
 DB_DIR="/data/paperclip/instances/default/db"
+DB_PARENT="$(dirname "${DB_DIR}")"
 BOOT_MARKER="/data/.paperclip-boot-ok"
 
 if [ -d "${DB_DIR}" ] && [ -f "${DB_DIR}/PG_VERSION" ]; then
@@ -26,9 +27,10 @@ fi
 if [ ! -f "${BOOT_MARKER}" ] && [ ! -f "${DB_DIR}/PG_VERSION" ]; then
     echo "No boot marker and no existing DB — fresh init..."
     rm -rf "${DB_DIR}"
-    mkdir -p "${DB_DIR}"
-    chmod 700 "${DB_DIR}"
-    chown paperclip:paperclip "${DB_DIR}"
+    mkdir -p "${DB_PARENT}"
+    chown -R paperclip:paperclip "${DB_PARENT}" 2>/dev/null || true
+    # Also wipe the config so it gets regenerated fresh
+    rm -f "/data/paperclip/instances/default/config.json"
 fi
 
 # Remove stale postmaster.pid if postgres isn't running
