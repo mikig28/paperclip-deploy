@@ -203,19 +203,41 @@ else
     echo ""
 fi
 
-# ── Mark first boot complete after health check passes ────────────────────────
-# Run in background: wait for the health endpoint, then create the marker
-(
-    for i in $(seq 1 60); do
-        sleep 5
-        if curl -sf "http://localhost:${PORT:-10000}/api/health" > /dev/null 2>&1; then
-            touch /data/.paperclip-boot-ok
-            echo "[boot-marker] Server healthy — boot marker created"
-            exit 0
-        fi
-    done
-    echo "[boot-marker] WARNING: health check never passed within 5 minutes"
-) &
+# ── Start Claude Remote Control in background ────────────────────────────────
+# This allows controlling the system from the Claude iOS/Android app
+if [ "${HAS_TOKEN}" = "yes" ] && [ "${ENABLE_REMOTE_CONTROL:-true}" = "true" ]; then
+    (
+        # Wait for server to be healthy first
+        for i in $(seq 1 60); do
+            sleep 5
+            if curl -sf "http://localhost:${PORT:-10000}/api/health" > /dev/null 2>&1; then
+                touch /data/.paperclip-boot-ok
+                echo "[boot-marker] Server healthy — boot marker created"
+                echo "[remote-control] Starting Claude Remote Control session..."
+                cd "${INSTANCE_ROOT}/workspaces"
+                CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR}" claude remote-control \
+                    --name "Paperclip Synapse" \
+                    2>&1 | while IFS= read -r line; do echo "[remote-control] ${line}"; done
+                echo "[remote-control] Session ended. Will NOT restart automatically."
+                exit 0
+            fi
+        done
+        echo "[boot-marker] WARNING: health check never passed within 5 minutes"
+    ) &
+else
+    # Just do the boot marker without remote control
+    (
+        for i in $(seq 1 60); do
+            sleep 5
+            if curl -sf "http://localhost:${PORT:-10000}/api/health" > /dev/null 2>&1; then
+                touch /data/.paperclip-boot-ok
+                echo "[boot-marker] Server healthy — boot marker created"
+                exit 0
+            fi
+        done
+        echo "[boot-marker] WARNING: health check never passed within 5 minutes"
+    ) &
+fi
 
 # ── Start Paperclip ──────────────────────────────────────────────────────────
 echo "Starting paperclipai..."
