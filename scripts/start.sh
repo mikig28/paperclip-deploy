@@ -26,6 +26,28 @@ if [ -d "${DB_DIR}" ] && [ ! -f "${DB_DIR}/PG_VERSION" ]; then
     rm -rf "${DB_DIR}"
 fi
 
+resolve_embedded_initdb() {
+    local global_root
+    global_root="$(npm root -g 2>/dev/null || true)"
+    if [ -z "${global_root}" ]; then
+        return 1
+    fi
+
+    local candidate
+    for candidate in \
+        "${global_root}/paperclipai/node_modules/@embedded-postgres/linux-x64/native/bin/initdb" \
+        "${global_root}/paperclipai/node_modules/@paperclipai/server/node_modules/@embedded-postgres/linux-x64/native/bin/initdb" \
+        "${global_root}/paperclipai/node_modules/@embedded-postgres/"*/native/bin/initdb \
+        "${global_root}/paperclipai/node_modules/@paperclipai/server/node_modules/@embedded-postgres/"*/native/bin/initdb
+    do
+        if [ -x "${candidate}" ]; then
+            echo "${candidate}"
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Claude CLI config dir
 mkdir -p "${CLAUDE_CONFIG_DIR}"
 mkdir -p "${HOME}"
@@ -136,6 +158,25 @@ if [ ! -f "${MASTER_KEY_FILE}" ]; then
     echo "Generating new master.key..."
     node -e "console.log(require('crypto').randomBytes(32).toString('base64'))" > "${MASTER_KEY_FILE}"
     echo "master.key generated. If migrating, replace this with your existing key."
+fi
+
+# Work around embedded-postgres startup bug by initializing cluster manually
+# when PG_VERSION is missing. This prevents paperclip startup from crashing.
+if [ ! -f "${DB_DIR}/PG_VERSION" ]; then
+    echo "PG_VERSION missing — bootstrapping embedded Postgres data dir..."
+    rm -rf "${DB_DIR}"
+    mkdir -p "${DB_DIR}"
+    INITDB_BIN="$(resolve_embedded_initdb || true)"
+    if [ -n "${INITDB_BIN}" ]; then
+        if ! "${INITDB_BIN}" -D "${DB_DIR}" -U paperclip -A trust > /tmp/paperclip-initdb.log 2>&1; then
+            echo "Manual initdb failed. Last output:"
+            sed -n '1,120p' /tmp/paperclip-initdb.log || true
+            exit 1
+        fi
+        echo "Manual initdb completed (${INITDB_BIN})"
+    else
+        echo "WARNING: Could not locate embedded initdb binary; continuing with paperclip startup."
+    fi
 fi
 
 # ── Claude CLI auth check ────────────────────────────────────────────────────
