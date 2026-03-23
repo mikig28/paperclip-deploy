@@ -182,19 +182,23 @@ if [ ! -f "${DB_DIR}/PG_VERSION" ]; then
     fi
 fi
 
-# ── Claude CLI auth check ────────────────────────────────────────────────────
-echo "Checking Claude CLI auth status..."
-CLAUDE_AUTH=$(claude auth status 2>&1 || true)
-echo "${CLAUDE_AUTH}"
-
-if echo "${CLAUDE_AUTH}" | grep -q '"loggedIn": *false\|"loggedIn":false'; then
+# ── Claude CLI auth check (file-based, no interactive OAuth) ─────────────────
+echo "Checking Claude CLI credentials..."
+CREDS_FILE="${CLAUDE_CONFIG_DIR}/credentials.json"
+if [ -f "${CREDS_FILE}" ]; then
+    HAS_TOKEN=$(node -e "try { const c = JSON.parse(require('fs').readFileSync('${CREDS_FILE}','utf8')); console.log(c.claudeAiOauth && c.claudeAiOauth.refreshToken ? 'yes' : 'no'); } catch(e) { console.log('no'); }" 2>/dev/null || echo "no")
+    if [ "${HAS_TOKEN}" = "yes" ]; then
+        echo "Claude CLI credentials found (has refresh token)"
+    else
+        echo "WARNING: Claude credentials file exists but missing refresh token"
+    fi
+else
     echo ""
     echo "╔══════════════════════════════════════════════════════════════╗"
     echo "║  CLAUDE CLI NOT AUTHENTICATED                              ║"
     echo "║                                                            ║"
-    echo "║  claude_local agents will fail until you run:              ║"
-    echo "║    claude login                                            ║"
-    echo "║  inside the Render shell (Dashboard > Shell tab)           ║"
+    echo "║  claude_local agents will fail until credentials are       ║"
+    echo "║  copied to ${CLAUDE_CONFIG_DIR}/credentials.json           ║"
     echo "╚══════════════════════════════════════════════════════════════╝"
     echo ""
 fi
