@@ -11,18 +11,24 @@ echo "Entrypoint: fixing /data ownership..."
 # previous root-owned runs that left files behind
 chown -R paperclip:paperclip /data 2>/dev/null || true
 
-# Clean up PG data dir if no successful boot has been recorded
-# This handles the case where previous deploys left a broken PG data dir
+# Fix PostgreSQL data directory permissions (must be 0700)
 DB_DIR="/data/paperclip/instances/default/db"
 BOOT_MARKER="/data/.paperclip-boot-ok"
 
-if [ ! -f "${BOOT_MARKER}" ]; then
-    echo "No successful boot marker found — wiping PG data dir for fresh init..."
+if [ -d "${DB_DIR}" ] && [ -f "${DB_DIR}/PG_VERSION" ]; then
+    echo "Fixing PostgreSQL data directory permissions..."
+    chmod 700 "${DB_DIR}"
+    # Also fix subdirectories that postgres needs
+    find "${DB_DIR}" -type d -exec chmod 700 {} \; 2>/dev/null || true
+    find "${DB_DIR}" -type f -exec chmod 600 {} \; 2>/dev/null || true
+fi
+
+if [ ! -f "${BOOT_MARKER}" ] && [ ! -f "${DB_DIR}/PG_VERSION" ]; then
+    echo "No boot marker and no existing DB — fresh init..."
     rm -rf "${DB_DIR}"
     mkdir -p "${DB_DIR}"
+    chmod 700 "${DB_DIR}"
     chown paperclip:paperclip "${DB_DIR}"
-    # Also wipe the config so it gets regenerated fresh
-    rm -f "/data/paperclip/instances/default/config.json"
 fi
 
 # Remove stale postmaster.pid if postgres isn't running

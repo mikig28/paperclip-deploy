@@ -8,6 +8,9 @@ echo "CLAUDE_CONFIG_DIR=${CLAUDE_CONFIG_DIR:-not set}"
 echo "PORT=${PORT:-10000}"
 echo "Running as: $(whoami) ($(id -u))"
 
+# ── Export CLAUDE_CONFIG_DIR so paperclip and claude CLI find credentials ────
+export CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-/data/claude-config}"
+
 # ── Ensure persistent directories exist ──────────────────────────────────────
 INSTANCE_ROOT="${PAPERCLIP_HOME}/instances/${PAPERCLIP_INSTANCE_ID:-default}"
 mkdir -p "${INSTANCE_ROOT}/db"
@@ -122,6 +125,12 @@ if [ ! -f "${MASTER_KEY_FILE}" ]; then
     echo "Generating new master.key..."
     node -e "console.log(require('crypto').randomBytes(32).toString('base64'))" > "${MASTER_KEY_FILE}"
     echo "master.key generated. If migrating, replace this with your existing key."
+fi
+
+# ── Ensure Claude credentials file exists without dot prefix ─────────────────
+if [ -f "${CLAUDE_CONFIG_DIR}/.credentials.json" ] && [ ! -f "${CLAUDE_CONFIG_DIR}/credentials.json" ]; then
+    cp "${CLAUDE_CONFIG_DIR}/.credentials.json" "${CLAUDE_CONFIG_DIR}/credentials.json"
+    echo "Copied .credentials.json -> credentials.json for CLI compatibility"
 fi
 
 # ── Claude CLI auth check ────────────────────────────────────────────────────
