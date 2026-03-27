@@ -38,6 +38,9 @@ ENV PAPERCLIP_DEPLOYMENT_EXPOSURE=public
 ENV PAPERCLIP_MIGRATION_AUTO_APPLY=true
 ENV HEARTBEAT_SCHEDULER_ENABLED=true
 
+# Limit Node.js heap to avoid OOM on memory-constrained containers
+ENV NODE_OPTIONS="--max-old-space-size=512"
+
 # Copy scripts (sed fixes Windows CRLF line endings)
 COPY scripts/entrypoint.sh /app/entrypoint.sh
 COPY scripts/start.sh /app/start.sh
