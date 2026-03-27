@@ -76,7 +76,7 @@ const config = {
     mode: 'embedded-postgres',
     embeddedPostgresDataDir: '${INSTANCE_ROOT}/db',
     embeddedPostgresPort: 54329,
-    backup: { enabled: true, intervalMinutes: 60, retentionDays: 30, dir: '${INSTANCE_ROOT}/data/backups' }
+    backup: { enabled: true, intervalMinutes: 360, retentionDays: 7, dir: '${INSTANCE_ROOT}/data/backups' }
   },
   logging: { mode: 'file', logDir: '${INSTANCE_ROOT}/logs' },
   server: {
@@ -177,6 +177,18 @@ if [ ! -f "${DB_DIR}/PG_VERSION" ]; then
             exit 1
         fi
         echo "Manual initdb completed (${INITDB_BIN})"
+        # Apply memory-constrained tuning to postgresql.conf
+        PG_CONF="${DB_DIR}/postgresql.conf"
+        if [ -f "${PG_CONF}" ]; then
+            echo "" >> "${PG_CONF}"
+            echo "# Memory tuning for constrained containers" >> "${PG_CONF}"
+            echo "shared_buffers = 64MB" >> "${PG_CONF}"
+            echo "work_mem = 2MB" >> "${PG_CONF}"
+            echo "maintenance_work_mem = 32MB" >> "${PG_CONF}"
+            echo "effective_cache_size = 128MB" >> "${PG_CONF}"
+            echo "max_connections = 20" >> "${PG_CONF}"
+            echo "PostgreSQL tuned for memory-constrained container"
+        fi
     else
         echo "WARNING: Could not locate embedded initdb binary; continuing with paperclip startup."
     fi
@@ -249,14 +261,51 @@ for lockfile in /tmp/.s.PGSQL.${PG_PORT}.lock /tmp/.s.PGSQL.${PG_PORT}; do
     fi
 done
 
-# ── Clean old database backups (keep last 7 days) to prevent disk fill ───────
+# ── Clean old database backups (keep last 3 days) to prevent disk fill ───────
 BACKUP_DIR="${INSTANCE_ROOT}/data/backups"
 if [ -d "${BACKUP_DIR}" ]; then
-    OLD_BACKUPS=$(find "${BACKUP_DIR}" -name "*.sql" -mtime +7 2>/dev/null | wc -l)
-    if [ "${OLD_BACKUPS}" -gt 0 ]; then
-        echo "Cleaning ${OLD_BACKUPS} old backups (>7 days)..."
-        find "${BACKUP_DIR}" -name "*.sql" -mtime +7 -delete 2>/dev/null || true
-        find "${BACKUP_DIR}" -name "*.sql.gz" -mtime +7 -delete 2>/dev/null || true
+    OLD_BACKUPS=$(find "${BACKUP_DIR}" -name "*.sql" -mtime +3 2>/dev/null | wc -l)
+    OLD_GZ=$(find "${BACKUP_DIR}" -name "*.sql.gz" -mtime +3 2>/dev/null | wc -l)
+    TOTAL_OLD=$((OLD_BACKUPS + OLD_GZ))
+    if [ "${TOTAL_OLD}" -gt 0 ]; then
+        echo "Cleaning ${TOTAL_OLD} old backups (>3 days)..."
+        find "${BACKUP_DIR}" -name "*.sql" -mtime +3 -delete 2>/dev/null || true
+        find "${BACKUP_DIR}" -name "*.sql.gz" -mtime +3 -delete 2>/dev/null || true
+    fi
+fi
+
+# ── Clean old run logs (keep last 3 days) to save disk and memory ────────────
+RUN_LOGS_DIR="${INSTANCE_ROOT}/data/run-logs"
+if [ -d "${RUN_LOGS_DIR}" ]; then
+    OLD_LOGS=$(find "${RUN_LOGS_DIR}" -type f -mtime +3 2>/dev/null | wc -l)
+    if [ "${OLD_LOGS}" -gt 0 ]; then
+        echo "Cleaning ${OLD_LOGS} old run-log files (>3 days)..."
+        find "${RUN_LOGS_DIR}" -type f -mtime +3 -delete 2>/dev/null || true
+    fi
+fi
+
+# ── Clean old application logs ───────────────────────────────────────────────
+LOGS_DIR="${INSTANCE_ROOT}/logs"
+if [ -d "${LOGS_DIR}" ]; then
+    OLD_APP_LOGS=$(find "${LOGS_DIR}" -type f -mtime +7 2>/dev/null | wc -l)
+    if [ "${OLD_APP_LOGS}" -gt 0 ]; then
+        echo "Cleaning ${OLD_APP_LOGS} old log files (>7 days)..."
+        find "${LOGS_DIR}" -type f -mtime +7 -delete 2>/dev/null || true
+    fi
+fi
+
+# ── Apply PostgreSQL memory tuning to existing clusters ──────────────────────
+PG_CONF="${DB_DIR}/postgresql.conf"
+if [ -f "${PG_CONF}" ]; then
+    if ! grep -q "# Memory tuning for constrained containers" "${PG_CONF}" 2>/dev/null; then
+        echo "" >> "${PG_CONF}"
+        echo "# Memory tuning for constrained containers" >> "${PG_CONF}"
+        echo "shared_buffers = 64MB" >> "${PG_CONF}"
+        echo "work_mem = 2MB" >> "${PG_CONF}"
+        echo "maintenance_work_mem = 32MB" >> "${PG_CONF}"
+        echo "effective_cache_size = 128MB" >> "${PG_CONF}"
+        echo "max_connections = 20" >> "${PG_CONF}"
+        echo "PostgreSQL tuned for memory-constrained container (existing cluster)"
     fi
 fi
 

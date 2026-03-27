@@ -39,7 +39,15 @@ ENV PAPERCLIP_MIGRATION_AUTO_APPLY=true
 ENV HEARTBEAT_SCHEDULER_ENABLED=true
 
 # Limit Node.js heap to avoid OOM on memory-constrained containers
-ENV NODE_OPTIONS="--max-old-space-size=512"
+# Reduced from 512 to 384 to leave more RAM for embedded PostgreSQL
+ENV NODE_OPTIONS="--max-old-space-size=384"
+
+# Tune embedded PostgreSQL for memory-constrained containers
+# shared_buffers=64MB (default 128MB), work_mem=2MB (default 4MB)
+ENV PGCONFIG_shared_buffers="64MB"
+ENV PGCONFIG_work_mem="2MB"
+ENV PGCONFIG_maintenance_work_mem="32MB"
+ENV PGCONFIG_effective_cache_size="128MB"
 
 # Copy scripts (sed fixes Windows CRLF line endings)
 COPY scripts/entrypoint.sh /app/entrypoint.sh
