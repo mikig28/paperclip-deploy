@@ -249,6 +249,10 @@ for lockfile in /tmp/.s.PGSQL.${PG_PORT}.lock /tmp/.s.PGSQL.${PG_PORT}; do
     fi
 done
 
+# ── Update paperclipai to latest version on every restart ────────────────────
+echo "Updating paperclipai to latest..."
+npm install -g paperclipai@latest 2>&1 | tail -1 || echo "WARNING: npm update failed; continuing with existing version"
+
 # ── Start Paperclip ──────────────────────────────────────────────────────────
 echo "Starting paperclipai..."
 exec paperclipai run
