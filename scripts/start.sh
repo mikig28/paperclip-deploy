@@ -239,6 +239,16 @@ else
     ) &
 fi
 
+# ── Clean stale PostgreSQL socket lock files ─────────────────────────────────
+# After a crash, /tmp/.s.PGSQL.*.lock can remain and block embedded PG startup
+PG_PORT="${EMBEDDED_PG_PORT:-54329}"
+for lockfile in /tmp/.s.PGSQL.${PG_PORT}.lock /tmp/.s.PGSQL.${PG_PORT}; do
+    if [ -e "${lockfile}" ] && ! pgrep -f "postgres.*${PG_PORT}" > /dev/null 2>&1; then
+        echo "Removing stale PostgreSQL socket lock: ${lockfile}"
+        rm -f "${lockfile}"
+    fi
+done
+
 # ── Start Paperclip ──────────────────────────────────────────────────────────
 echo "Starting paperclipai..."
 exec paperclipai run

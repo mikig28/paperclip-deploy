@@ -42,6 +42,20 @@ if [ -f "${DB_DIR}/postmaster.pid" ]; then
     fi
 fi
 
+# Remove stale PostgreSQL socket lock files from /tmp
+# After a crash or forced restart, these lock files can remain and prevent
+# PostgreSQL from starting with: FATAL: lock file "/tmp/.s.PGSQL.*.lock" already exists
+PG_PORT="${EMBEDDED_PG_PORT:-54329}"
+for lockfile in /tmp/.s.PGSQL.${PG_PORT}.lock /tmp/.s.PGSQL.${PG_PORT}; do
+    if [ -e "${lockfile}" ]; then
+        # Check if a postgres process is actually using this port
+        if ! pgrep -f "postgres.*${PG_PORT}" > /dev/null 2>&1; then
+            echo "Removing stale PostgreSQL socket lock: ${lockfile}"
+            rm -f "${lockfile}"
+        fi
+    fi
+done
+
 echo "Entrypoint: dropping to paperclip user..."
 
 # Drop privileges and run the main startup script
