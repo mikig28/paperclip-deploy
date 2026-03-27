@@ -1,5 +1,6 @@
 export interface DashboardConfig {
   apiUrl: string;
+  authToken: string;
   pollInterval: number;
   autoRotate: boolean;
 }
@@ -21,6 +22,7 @@ export function saveConfig(config: DashboardConfig): void {
 function defaultConfig(): DashboardConfig {
   return {
     apiUrl: window.location.origin,
+    authToken: '',
     pollInterval: 5000,
     autoRotate: false,
   };
@@ -37,6 +39,8 @@ export function initConfigPanel(
     <h3>Settings</h3>
     <label for="cfg-url">Paperclip API URL</label>
     <input type="text" id="cfg-url" value="${config.apiUrl}" placeholder="http://localhost:10000" />
+    <label for="cfg-token">Auth Token (Bearer)</label>
+    <input type="text" id="cfg-token" value="${config.authToken}" placeholder="Optional — for authenticated instances" />
     <label for="cfg-interval">Poll Interval (seconds)</label>
     <input type="number" id="cfg-interval" value="${config.pollInterval / 1000}" min="2" max="60" step="1" />
     <div class="toggle-row">
@@ -52,11 +56,13 @@ export function initConfigPanel(
 
   panel.querySelector('#cfg-save')!.addEventListener('click', () => {
     const url = (panel.querySelector('#cfg-url') as HTMLInputElement).value;
+    const token = (panel.querySelector('#cfg-token') as HTMLInputElement).value.trim();
     const interval = parseFloat((panel.querySelector('#cfg-interval') as HTMLInputElement).value) * 1000;
     const autoRotate = (panel.querySelector('#cfg-rotate') as HTMLInputElement).checked;
 
     const newConfig: DashboardConfig = {
       apiUrl: url || config.apiUrl,
+      authToken: token,
       pollInterval: Math.max(2000, Math.min(60000, interval || 5000)),
       autoRotate,
     };

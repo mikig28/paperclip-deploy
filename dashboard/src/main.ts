@@ -154,6 +154,7 @@ function reconcile(agents: AgentStatus[]) {
 
 // --- API setup ---
 const client = new PaperclipClient(config.apiUrl);
+if (config.authToken) client.setAuthToken(config.authToken);
 let useDemoMode = true;
 
 function onPollUpdate(agents: AgentStatus[], isHealthy: boolean) {
@@ -177,6 +178,7 @@ updateHUD(DEMO_AGENTS, false);
 // --- Config panel ---
 initConfigPanel(config, (newConfig: DashboardConfig) => {
   client.setBaseUrl(newConfig.apiUrl);
+  client.setAuthToken(newConfig.authToken || null);
   poller.setInterval(newConfig.pollInterval);
   controls.autoRotate = newConfig.autoRotate;
 });
