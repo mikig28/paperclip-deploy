@@ -42,5 +42,7 @@ services:
       # - key: PAPERCLIP_PUBLIC_URL
       #   value: "https://paperclip-XXXX.onrender.com"
       # Copy from your local .env:
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=512"
       - key: PAPERCLIP_AGENT_JWT_SECRET
         sync: false

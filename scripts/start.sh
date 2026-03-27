@@ -249,6 +249,17 @@ for lockfile in /tmp/.s.PGSQL.${PG_PORT}.lock /tmp/.s.PGSQL.${PG_PORT}; do
     fi
 done
 
+# ── Clean old database backups (keep last 7 days) to prevent disk fill ───────
+BACKUP_DIR="${INSTANCE_ROOT}/data/backups"
+if [ -d "${BACKUP_DIR}" ]; then
+    OLD_BACKUPS=$(find "${BACKUP_DIR}" -name "*.sql" -mtime +7 2>/dev/null | wc -l)
+    if [ "${OLD_BACKUPS}" -gt 0 ]; then
+        echo "Cleaning ${OLD_BACKUPS} old backups (>7 days)..."
+        find "${BACKUP_DIR}" -name "*.sql" -mtime +7 -delete 2>/dev/null || true
+        find "${BACKUP_DIR}" -name "*.sql.gz" -mtime +7 -delete 2>/dev/null || true
+    fi
+fi
+
 # ── Update paperclipai to latest version on every restart ────────────────────
 echo "Updating paperclipai to latest..."
 npm install -g paperclipai@latest 2>&1 | tail -1 || echo "WARNING: npm update failed; continuing with existing version"
