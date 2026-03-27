@@ -44,5 +44,14 @@ services:
       # Copy from your local .env:
       - key: NODE_OPTIONS
         value: "--max-old-space-size=384"
+      # --- External PostgreSQL (removes embedded PG, frees ~400MB RAM) ---
+      # Uncomment and set DATABASE_URL to switch to external Postgres:
+      # - key: DATABASE_URL
+      #   value: "postgresql://user:pass@host:5432/paperclip"
+      # Or use a Render Managed PostgreSQL:
+      # - key: DATABASE_URL
+      #   fromDatabase:
+      #     name: paperclip-db
+      #     property: connectionString
       - key: PAPERCLIP_AGENT_JWT_SECRET
         sync: false

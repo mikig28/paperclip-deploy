@@ -21,12 +21,24 @@ mkdir -p "${INSTANCE_ROOT}/logs"
 mkdir -p "${INSTANCE_ROOT}/workspaces"
 mkdir -p "${INSTANCE_ROOT}/projects"
 
+# ── Detect database mode ──────────────────────────────────────────────────────
+if [ -n "${DATABASE_URL:-}" ]; then
+    DB_MODE="external-postgres"
+    echo "Database mode: EXTERNAL PostgreSQL"
+    echo "DATABASE_URL is set (host: $(echo "${DATABASE_URL}" | sed -E 's|.*@([^:/]+).*|\1|'))"
+else
+    DB_MODE="embedded-postgres"
+    echo "Database mode: EMBEDDED PostgreSQL"
+fi
+
 # Embedded PG startup currently fails if the target data dir is pre-created.
 # Keep /db absent on first boot; remove any non-cluster dir (missing PG_VERSION).
 DB_DIR="${INSTANCE_ROOT}/db"
-if [ -d "${DB_DIR}" ] && [ ! -f "${DB_DIR}/PG_VERSION" ]; then
-    echo "DB dir exists without PG_VERSION; removing for clean initdb..."
-    rm -rf "${DB_DIR}"
+if [ "${DB_MODE}" = "embedded-postgres" ]; then
+    if [ -d "${DB_DIR}" ] && [ ! -f "${DB_DIR}/PG_VERSION" ]; then
+        echo "DB dir exists without PG_VERSION; removing for clean initdb..."
+        rm -rf "${DB_DIR}"
+    fi
 fi
 
 resolve_embedded_initdb() {
@@ -72,7 +84,10 @@ if [ ! -f "${CONFIG_FILE}" ]; then
 const fs = require('fs');
 const config = {
   \"\\\$meta\": { version: 1, updatedAt: new Date().toISOString(), source: 'configure' },
-  database: {
+  database: '${DB_MODE}' === 'external-postgres' ? {
+    mode: 'external-postgres',
+    connectionString: process.env.DATABASE_URL
+  } : {
     mode: 'embedded-postgres',
     embeddedPostgresDataDir: '${INSTANCE_ROOT}/db',
     embeddedPostgresPort: 54329,
@@ -131,6 +146,22 @@ if (config.server) {
   if (config.server.exposure !== 'public') { config.server.exposure = 'public'; changed = true; }
   if (config.server.host !== '0.0.0.0') { config.server.host = '0.0.0.0'; changed = true; }
 }
+// Switch database mode if DATABASE_URL is set/unset
+const dbMode = '${DB_MODE}';
+if (dbMode === 'external-postgres' && config.database && config.database.mode !== 'external-postgres') {
+  config.database = { mode: 'external-postgres', connectionString: process.env.DATABASE_URL };
+  changed = true;
+  console.log('Switched database to external-postgres');
+} else if (dbMode === 'embedded-postgres' && config.database && config.database.mode === 'external-postgres') {
+  config.database = {
+    mode: 'embedded-postgres',
+    embeddedPostgresDataDir: '${INSTANCE_ROOT}/db',
+    embeddedPostgresPort: 54329,
+    backup: { enabled: true, intervalMinutes: 360, retentionDays: 7, dir: '${INSTANCE_ROOT}/data/backups' }
+  };
+  changed = true;
+  console.log('Switched database back to embedded-postgres');
+}
 if (changed) {
   config[metaKey].updatedAt = new Date().toISOString();
   fs.writeFileSync('${CONFIG_FILE}', JSON.stringify(config, null, 2));
@@ -165,7 +196,7 @@ fi
 
 # Work around embedded-postgres startup bug by initializing cluster manually
 # when PG_VERSION is missing. This prevents paperclip startup from crashing.
-if [ ! -f "${DB_DIR}/PG_VERSION" ]; then
+if [ "${DB_MODE}" = "embedded-postgres" ] && [ ! -f "${DB_DIR}/PG_VERSION" ]; then
     echo "PG_VERSION missing — bootstrapping embedded Postgres data dir..."
     rm -rf "${DB_DIR}"
     mkdir -p "${DB_DIR}"
@@ -296,7 +327,7 @@ fi
 
 # ── Apply PostgreSQL memory tuning to existing clusters ──────────────────────
 PG_CONF="${DB_DIR}/postgresql.conf"
-if [ -f "${PG_CONF}" ]; then
+if [ "${DB_MODE}" = "embedded-postgres" ] && [ -f "${PG_CONF}" ]; then
     if ! grep -q "# Memory tuning for constrained containers" "${PG_CONF}" 2>/dev/null; then
         echo "" >> "${PG_CONF}"
         echo "# Memory tuning for constrained containers" >> "${PG_CONF}"
@@ -312,6 +343,13 @@ fi
 # ── Update paperclipai to latest version on every restart ────────────────────
 echo "Updating paperclipai to latest..."
 npm install -g paperclipai@latest 2>&1 | tail -1 || echo "WARNING: npm update failed; continuing with existing version"
+
+# ── Adjust Node.js heap for database mode ────────────────────────────────────
+# External PG frees ~400MB+ of container RAM, so Node.js can use more
+if [ "${DB_MODE}" = "external-postgres" ]; then
+    export NODE_OPTIONS="--max-old-space-size=768"
+    echo "Node.js heap raised to 768MB (external PostgreSQL mode)"
+fi
 
 # ── Start Paperclip ──────────────────────────────────────────────────────────
 echo "Starting paperclipai..."
