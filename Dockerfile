@@ -38,10 +38,15 @@ ENV PAPERCLIP_DEPLOYMENT_EXPOSURE=public
 ENV PAPERCLIP_MIGRATION_AUTO_APPLY=true
 ENV HEARTBEAT_SCHEDULER_ENABLED=true
 
+# Build the 3D agent dashboard
+COPY dashboard/ /app/dashboard/
+RUN cd /app/dashboard && npm install && npx vite build && rm -rf node_modules
+
 # Copy scripts (sed fixes Windows CRLF line endings)
 COPY scripts/entrypoint.sh /app/entrypoint.sh
 COPY scripts/start.sh /app/start.sh
 COPY scripts/migrate-state.sh /app/migrate-state.sh
+COPY scripts/proxy.js /app/proxy.js
 RUN sed -i 's/\r$//' /app/entrypoint.sh /app/start.sh /app/migrate-state.sh && \
     chmod +x /app/entrypoint.sh /app/start.sh /app/migrate-state.sh
 

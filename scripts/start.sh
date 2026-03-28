@@ -253,6 +253,26 @@ done
 echo "Updating paperclipai to latest..."
 npm install -g paperclipai@latest 2>&1 | tail -1 || echo "WARNING: npm update failed; continuing with existing version"
 
-# ── Start Paperclip ──────────────────────────────────────────────────────────
-echo "Starting paperclipai..."
-exec paperclipai run
+# ── Start Paperclip behind reverse proxy ─────────────────────────────────────
+# The proxy listens on PORT (10000) and routes:
+#   /office/*  → 3D Agent Dashboard (static files)
+#   /*         → Paperclip server (on PORT+1)
+PAPERCLIP_INTERNAL_PORT=$((${PORT:-10000} + 1))
+DASHBOARD_DIR="/app/dashboard/dist"
+
+if [ -f "/app/proxy.js" ] && [ -d "${DASHBOARD_DIR}" ]; then
+    echo "Starting Paperclip on internal port ${PAPERCLIP_INTERNAL_PORT}..."
+    echo "Starting reverse proxy on port ${PORT:-10000}..."
+    echo "  Dashboard: https://<your-domain>/office"
+    echo "  Paperclip: https://<your-domain>/"
+
+    # Start Paperclip on the internal port in the background
+    PORT="${PAPERCLIP_INTERNAL_PORT}" paperclipai run &
+    PAPERCLIP_PID=$!
+
+    # Start the reverse proxy on the public port (foreground)
+    exec node /app/proxy.js
+else
+    echo "Starting paperclipai (no dashboard proxy)..."
+    exec paperclipai run
+fi
